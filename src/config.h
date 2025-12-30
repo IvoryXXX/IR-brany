@@ -73,3 +73,8 @@ static const uint16_t DIAG_DIFF_PERF  = 120;
 
 // OLED
 static const uint8_t OLED_ADDR = 0x3C;   // když nic, zkus 0x3D
+
+static const uint16_t GATE_THRESHOLD = 15;   // kdy začne pípání a běh času
+static const uint16_t ALARM_TIME_MS  = 3000;
+
+static const uint16_t RUN_THR = 20;   // prah pro "porušení" v RUN (doladíš podle reality)
