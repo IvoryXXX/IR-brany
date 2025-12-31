@@ -335,13 +335,13 @@ int16_t strength1 = gate1.getStrength();
     return;
   }
 
-  // Pokud není idle nastavené, bránu nemůžeme spolehlivě vyhodnotit.
-  // V tom případě nic nepočítej a nepípej.
-  bool hasIdle = gate1.hasIdleSet();
-bool broken1 = (hasIdle ? gate1.isBroken(RUN_THR) : false);
+// Brána: detekce funguje i bez kalibrace (fallback = abs(diff)).
+// Kalibrace (setIdle) pouze zlepší stabilitu v náročném prostředí.
+bool broken1 = gate1.isBroken(RUN_THR);
 
-  // "Signal OK" = není broken (pro UI)
-  s.gate1Signal = hasIdle ? (!broken1) : false;
+// "Signal OK" = není broken (pro UI)
+s.gate1Signal = !broken1;
+
 
   // Přerušení = broken
   if (broken1) {
