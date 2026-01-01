@@ -1,0 +1,57 @@
+DISPLEJ (I2C)
+GND → GND
+VCC → 3.3 V
+SCL → PB6
+SDA → PB7
+
+TLAČÍTKO 1
+kontakt → PB10
+kontakt → GND
+
+TLAČÍTKO 2
+kontakt → PB11
+kontakt → GND
+
+BZUČÁK
+pin A → PB8
+pin B → PB9
+
+IR BRÁNA 1
+anoda → GND
+katoda → PA0
+rezistor 45 kΩ: PA0 → 3.3 V
+
+IR BRÁNA 2
+anoda → GND
+katoda → PA1
+rezistor 45 kΩ: PA1 → 3.3 V
+
+IR BRÁNA 3
+anoda → GND
+katoda → PA2
+rezistor 45 kΩ: PA2 → 3.3 V
+
+IR BRÁNA 4
+anoda → GND
+katoda → PA3
+rezistor 45 kΩ: PA3 → 3.3 V
+
+IR BRÁNA 5
+anoda → GND
+katoda → PA4
+rezistor 45 kΩ: PA4 → 3.3 V
+
+IR BRÁNA 6
+anoda → GND
+katoda → PA5
+rezistor 45 kΩ: PA5 → 3.3 V
+
+IR BRÁNA 7
+anoda → GND
+katoda → PA6
+rezistor 45 kΩ: PA6 → 3.3 V
+
+IR BRÁNA 8
+anoda → GND
+katoda → PA7
+rezistor 45 kΩ: PA7 → 3.3 V

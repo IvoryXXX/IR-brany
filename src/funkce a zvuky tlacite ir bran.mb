@@ -1,0 +1,135 @@
+FINÁLNÍ SPEC – CHOVÁNÍ IR BRAN
+Ovládací prvky
+
+Tlačítko 1 (T1) – hlavní přepínač
+Funkce: ARM / DISARM, vstup do DIAG, nastavování ZERO / MAX
+
+Tlačítko 2 (T2) – pomocné tlačítko
+Funkce: přepínání bran v DIAG, reset počítadel v RUN
+
+MÓDY
+
+Systém má dva základní módy:
+
+RUN mód – normální provoz, hlídání bran
+
+DIAG mód – instalační a kalibrační režim
+
+RUN MÓD (normální provoz)
+Tlačítko 1 – ARM / DISARM
+
+ON → hlídání bran aktivní (ARM)
+
+OFF → hlídání bran vypnuté (DISARM)
+
+Zvuk:
+
+ARM ON → krátký potvrzovací klik (cca 30 ms)
+
+ARM OFF → ticho
+
+Hlídání bran (ARM)
+
+Pokud je signál na bráně OK → ticho
+
+Jakmile signál spadne k 0 / pod práh:
+
+po 1 s → rychlé varovné pípání
+
+po 2 s → táhlý tón
+
+po 3 s → spuštění alarmu / melodie
+
+zároveň se započítá bod konkrétní bráně
+
+Další bod lze započítat až po návratu signálu a novém přerušení
+
+Přechod RUN ↔ DIAG
+
+10× ON↔OFF T1 během 5 sekund
+
+Počítají se pouze OFF→ON hrany
+
+Pokud je pauza mezi hranami > ~800 ms, sekvence se zahodí
+
+Zvuk:
+
+RUN → DIAG → 3× krátké pípnutí (2400 Hz)
+
+DIAG → RUN → 1× dlouhé pípnutí (1800 Hz)
+
+Tlačítko 2 – RESET POČÍTADEL (POUZE RUN)
+
+držet T2 ON 10 sekund → vymazání počtů přerušení všech bran
+
+Kalibrace ZERO / MAX zůstává zachována
+
+Reset funguje výhradně v RUN módu
+
+Zvuk:
+
+reset proveden → 3× delší pípnutí (2000 Hz, ~150 ms)
+
+DIAG MÓD (instalace / kalibrace)
+Účel
+
+rozmístění přijímačů
+
+kalibrace ZERO (0 %) a MAX (100 %) pro každou bránu
+
+ladění příjmu IR signálu pomocí zvuku
+
+Výběr brány
+
+Tlačítko 2 – krátký stisk
+
+přepne na další bránu (Gate 1 → Gate 2 → …)
+
+Zvuk:
+
+krátký klik (2400 Hz, ~25 ms)
+
+Nastavení ZERO / MAX
+
+Tlačítko 1 – držet ON 5 sekund
+
+Sekvence je cyklická:
+
+první 5 s → uloží ZERO (0 %)
+
+další 5 s → uloží MAX (100 %)
+
+další 5 s → znovu ZERO
+
+… pořád dokola
+
+Zvuk:
+
+uložení ZERO → 1× střední pípnutí (1800 Hz, ~180 ms)
+
+uložení MAX → 2× krátké pípnutí (2200 Hz)
+
+Zvuková odezva úrovně signálu (DIAG)
+
+0 % → 1× krátké pípnutí každých ~5 s
+
+100 % → táhlý tón (referenční maximum)
+
+mezi tím:
+
+čím vyšší úroveň signálu, tím častější / výraznější pípání
+
+slouží k doladění polohy přijímače a zdroje (typicky 1–2 m)
+
+Další poznámky
+
+DIAG mód slouží výhradně pro instalaci
+
+Reset kalibrací není potřeba – řeší se opakováním ZERO / MAX
+
+Při vypnutém zvuku (SOUND_DISABLED) se všechny akce signalizují vizuálně na OLED
+
+Stav systému jednou větou
+
+RUN hlídá a počítá, DIAG kalibruje.
+T1 řídí mód a kalibraci, T2 přepíná brány a v RUN maže počítadla.

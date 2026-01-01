@@ -148,7 +148,7 @@ static void enterDiag() {
   selectedGate = 0;
   resetDiagMetrics(now);
 
-  // 3 krátké
+  // 3 krátké (spec)
   buzzer.beepMs(2400, 60); delay(35);
   buzzer.beepMs(2400, 60); delay(35);
   buzzer.beepMs(2400, 60);
@@ -156,7 +156,7 @@ static void enterDiag() {
 
 static void enterRun() {
   mode = AppMode::Run;
-  buzzer.beepMs(2000, 180); // 1 dlouhé
+  buzzer.beepMs(1800, 240); // 1 dlouhé (spec)
 }
 
 static void toggleMode() {
@@ -266,8 +266,8 @@ void loop() {
       b1WasPressed = true;
       armed = !armed;
 
-      if (armed) { ignoreUntil = now + ARM_IGNORE_MS; buzzer.beepMs(2200, 60); }
-      else { buzzer.beepMs(1400, 80); buzzer.off(); resetRunStates(); }
+      if (armed) { ignoreUntil = now + ARM_IGNORE_MS; buzzer.click(); } // ARM ON = klik
+      else { buzzer.off(); resetRunStates(); }                         // ARM OFF = ticho
     } else if (!b1 && b1WasPressed) b1WasPressed = false;
   } else {
     armed = false;
@@ -281,6 +281,8 @@ void loop() {
   if (mode == AppMode::Diag) {
     int16_t strength = gates[selectedGate].getStrength();
     updateDiagMetrics(strength, now);
+
+    // zvuk DIAG nechávám na strength (zatím), spec percent doděláme později
     buzzer.tickDiagMeter(now, strength);
 
     UiState s;
@@ -305,7 +307,7 @@ void loop() {
 
   if (!armed || inIgnore) {
     buzzer.off();
-    s.gate1Signal = false;
+    s.gate1Signal = !gates[0].isBroken(RUN_THR);
     s.stage = 0;
     s.interruptedMs = 0;
 
@@ -338,10 +340,11 @@ void loop() {
       if (ms > longestInterruptedMs) longestInterruptedMs = ms;
 
       uint8_t stage = 0;
-      if      (ms < STAGE1_MS) stage = 1;
-      else if (ms < STAGE2_MS) stage = 2;
-      else if (ms < STAGE3_MS) stage = 3;
-      else                     stage = 4;
+      // SPEC: 0..1s ticho, 1..2s rychlé pípání, 2..3s táhlý tón, 3s+ alarm
+      if      (ms < STAGE1_MS) stage = 0;
+      else if (ms < STAGE2_MS) stage = 1;
+      else if (ms < STAGE3_MS) stage = 2;
+      else                     stage = 3;
 
       if (stage > worstStage) worstStage = stage;
 
@@ -353,12 +356,16 @@ void loop() {
   }
 
   SoundMode sm = SoundMode::Off;
+  // Mapujeme na existující režimy Buzzeru:
+  //  - spec stage1 (1..2s) = rychlé pípání => GateInterruptedStage3
+  //  - spec stage2 (2..3s) = táhlý tón     => GateInterruptedStage1
+  //  - spec stage3 (3s+)   = siréna        => GateInterruptedSiren
   switch (worstStage) {
     default: sm = SoundMode::Off; break;
-    case 1:  sm = SoundMode::GateInterruptedStage1; break;
-    case 2:  sm = SoundMode::GateInterruptedStage2; break;
-    case 3:  sm = SoundMode::GateInterruptedStage3; break;
-    case 4:  sm = SoundMode::GateInterruptedSiren;  break;
+    case 0:  sm = SoundMode::Off; break;
+    case 1:  sm = SoundMode::GateInterruptedStage3; break;
+    case 2:  sm = SoundMode::GateInterruptedStage1; break;
+    case 3:  sm = SoundMode::GateInterruptedSiren;  break;
   }
 
   // UI má jen gate1Signal => mapuju na B1

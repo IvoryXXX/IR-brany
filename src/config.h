@@ -48,7 +48,11 @@ static const uint16_t DIAG_WINDOW_MS = 9000;
 static const uint8_t  DIAG_TOGGLES   = 10;
 static const uint16_t TOGGLE_GAP_END_MS = 650;
 
-// -------- Eskalace zvuku při PŘERUŠENÍ --------
+// -------- Eskalace zvuku při PŘERUŠENÍ (SPEC) --------
+// 0..1s: ticho
+// 1..2s: rychlé pípání
+// 2..3s: táhlý tón
+// 3s+: siréna + počítání bodu
 static const uint16_t STAGE1_MS   = 1000;
 static const uint16_t STAGE2_MS   = 2000;
 static const uint16_t STAGE3_MS   = 3000;
