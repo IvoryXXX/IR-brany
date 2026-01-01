@@ -3,8 +3,7 @@
 #include "Buzzer.h"
 #include "UiOled.h"
 #include "Storage.h"
-#include "Gate.h"   // <-- NOVÉ
-
+#include "Gate.h"
 
 static uint32_t gateCounts[GATE_COUNT] = {0};
 
@@ -13,20 +12,20 @@ static UiOled ui;
 static Storage storage;
 
 static AppMode mode = AppMode::Run;
-static uint8_t selectedGate = 0; // 0..9
+static uint8_t selectedGate = 0; // 0..GATE_COUNT-1
 
-// Zatím měříme jen jednu bránu fyzicky (PA0 = IR1_PIN), ale UI má 10
-static Gate gate1;
+// 8 bran
+static Gate gates[GATE_COUNT];
 
 // ------------------------------------------------------------
-// ARM debounce (LOW = ON)
+// ARM debounce (INPUT_PULLUP, active LOW) na BTN1
 // ------------------------------------------------------------
 static bool readArmDebounced() {
   static uint8_t stable = HIGH;
   static uint8_t last = HIGH;
   static uint32_t lastChange = 0;
 
-  uint8_t r = digitalRead(SW_ARM);
+  uint8_t r = digitalRead(BTN1_PIN);
   uint32_t now = millis();
 
   if (r != last) { last = r; lastChange = now; }
@@ -36,9 +35,9 @@ static bool readArmDebounced() {
 }
 
 // ------------------------------------------------------------
-// ToggleTracker: vyhodnotí sekvenci OFF->ON přepnutí
+// ToggleTracker: vyhodnotí sekvenci OFF->ON přepnutí ARM (BTN1)
 // - 10x v okně => toggle DIAG
-// - DIAG: 1x => next gate, 3x => set idle (kalibrace)
+// - DIAG: 1x => next gate, 3x => set idle (kalibrace) vybrané brány
 // - RUN: 3x => reset počítadel
 // ------------------------------------------------------------
 struct ToggleTracker {
@@ -47,11 +46,10 @@ struct ToggleTracker {
   uint8_t  count = 0;
 
   bool lastArmed = false;
-
   uint32_t gapEndMs = TOGGLE_GAP_END_MS;
 
   bool updateEdge(bool armed, uint32_t nowMs) {
-    bool edge = (armed && !lastArmed);
+    bool edge = (armed && !lastArmed); // OFF->ON
     lastArmed = armed;
     if (!edge) return false;
 
@@ -88,7 +86,7 @@ static ToggleTracker toggles;
 
 // ------------------------------------------------------------
 // DIAG metriky: peak hold + noise (max-min v okně)
-// Pozor: teď metriky děláme nad "strength", ne nad raw diff.
+// Metriky děláme nad "strength" z vybrané brány.
 // ------------------------------------------------------------
 static int16_t metNow = 0;
 static int16_t metPeak = 0;
@@ -144,8 +142,7 @@ static void toggleMode() {
 
   if (mode == AppMode::Run) {
     mode = AppMode::Diag;
-    selectedGate = 0; // začni na B1
-
+    selectedGate = 0;
     resetDiagMetrics(now);
 
     // signature: 3 rychlé píp
@@ -164,8 +161,14 @@ static void toggleMode() {
 // Setup
 // ------------------------------------------------------------
 void setup() {
-  pinMode(IR1_PIN, INPUT_ANALOG);
-  pinMode(SW_ARM, INPUT_PULLUP);
+  // Tlačítka
+  pinMode(BTN1_PIN, INPUT_PULLUP);
+  pinMode(BTN2_PIN, INPUT_PULLUP);
+
+  // Analog vstupy pro brány
+  for (uint8_t i = 0; i < GATE_COUNT; i++) {
+    pinMode(GATE_PINS[i], INPUT_ANALOG);
+  }
 
   buzzer.begin(PZ_A, PZ_B);
 
@@ -177,8 +180,10 @@ void setup() {
 
   ui.begin();
 
-  // NOVÉ: Gate engine
-  gate1.begin(IR1_PIN);
+  // Gate engine
+  for (uint8_t i = 0; i < GATE_COUNT; i++) {
+    gates[i].begin(GATE_PINS[i]);
+  }
 }
 
 // ------------------------------------------------------------
@@ -187,10 +192,10 @@ void setup() {
 void loop() {
   uint32_t now = millis();
 
-  // --- čtení přepínače ---
+  // --- čtení ARM (BTN1) ---
   bool armed = readArmDebounced();
 
-  // --- zpracování togglů ---
+  // --- zpracování togglů na ARM ---
   toggles.updateEdge(armed, now);
 
   uint8_t doneCount = toggles.finalizeIfReady(now);
@@ -204,21 +209,14 @@ void loop() {
         if (doneCount == 1) {
           selectedGate = (uint8_t)((selectedGate + 1) % GATE_COUNT);
           buzzer.click();
+          resetDiagMetrics(now);
         } else if (doneCount == 3) {
-          // Zatím fyzicky kalibrujeme jen gate1 (B1)
-          // (Když později přidáš 10 bran, budeš kalibrovat gate[selectedGate])
-          if (selectedGate == 0) {
-            gate1.setIdle();
-            resetDiagMetrics(now);
+          gates[selectedGate].setIdle();
+          resetDiagMetrics(now);
 
-            // potvrzení kalibrace: 2x krátké píp
-            buzzer.beepMs(2000, 70); delay(60);
-            buzzer.beepMs(2000, 70);
-          } else {
-            // ostatní brány zatím nejsou fyzicky zapojené
-            // krátké "ne" pípnutí
-            buzzer.beepMs(1200, 80);
-          }
+          // potvrzení kalibrace: 2x krátké píp
+          buzzer.beepMs(2000, 70); delay(60);
+          buzzer.beepMs(2000, 70);
         }
         // 2..9 ignor
       } else {
@@ -237,36 +235,29 @@ void loop() {
   }
 
   // ----------------------------------------------------------
-  // Gate update (zatím jen gate1)
+  // Gate update (všechny brány)
   // ----------------------------------------------------------
-  gate1.update();
+  for (uint8_t i = 0; i < GATE_COUNT; i++) {
+    gates[i].update();
+  }
 
-  // strength = |diff - idle|
-  int16_t rawDiff1 = gate1.getDiff();
-int16_t strength1 = gate1.getStrength();
+  // Vybraná brána pro DIAG metriky
+  int16_t strengthSel = gates[selectedGate].getStrength();
 
   // ----------------------------------------------------------
-  // DIAG mód: pípání zrychluje + zobrazení metrik
+  // DIAG mód
   // ----------------------------------------------------------
   if (mode == AppMode::Diag) {
-    // metriky děláme z "strength"
-    updateDiagMetrics(strength1, now);
-
-    // DIAG zvuk: posíláme strength
-    buzzer.tickDiagMeter(now, strength1);
+    updateDiagMetrics(strengthSel, now);
+    buzzer.tickDiagMeter(now, strengthSel);
 
     UiState s;
     s.mode = AppMode::Diag;
     s.selectedGate = selectedGate;
 
-    // Pozn.: UI má pole diff/diffPeak/noise – použijeme je pro strength/peak/noise
-    // (pokud chceš, později přejmenujeme v UI na STR/PEAK/NOISE)
     s.diff = metNow;
     s.diffPeak = metPeak;
     s.noise = getNoise();
-
-    // Pokud chceš vidět i raw diff, musel bys rozšířit UiState + UiOled.
-    // Tady ho zatím jen "držíme" v proměnné rawDiff1 pro případné logy.
 
     static uint32_t lastDraw = 0;
     if (now - lastDraw >= 120) {
@@ -277,8 +268,7 @@ int16_t strength1 = gate1.getStrength();
   }
 
   // ----------------------------------------------------------
-  // RUN mód: ARM + eskalace + počítání B1
-  // Porušení = odchylka od idle > RUN_THR (tj. broken)
+  // RUN mód: ARM + eskalace + počítání (pro všechny brány)
   // ----------------------------------------------------------
   UiState s;
   s.mode = AppMode::Run;
@@ -288,7 +278,6 @@ int16_t strength1 = gate1.getStrength();
   static bool lastArmedForIgnore = false;
 
   if (armed && !lastArmedForIgnore) {
-    // po zapnutí ARM: krátké ignore okno
     ignoreUntil = now + ARM_IGNORE_MS;
   }
   lastArmedForIgnore = armed;
@@ -296,35 +285,21 @@ int16_t strength1 = gate1.getStrength();
   bool inIgnore = (armed && now < ignoreUntil);
   s.inIgnore = inIgnore;
 
-  // per-run přerušení pro gate1
-  static bool interrupted1 = false;
-  static uint32_t interruptSince1 = 0;
-  static bool countedThisInterrupt1 = false;
+  // Per-gate interruption tracking
+  static bool interrupted[GATE_COUNT] = {0};
+  static uint32_t interruptSince[GATE_COUNT] = {0};
+  static bool countedThisInterrupt[GATE_COUNT] = {0};
 
-  if (!armed) {
-    interrupted1 = false;
-    countedThisInterrupt1 = false;
-    buzzer.off();
-
-    s.gate1Signal = false;
-    s.stage = 0;
-
-    static uint32_t lastDraw = 0;
-    if (now - lastDraw >= 200) {
-      lastDraw = now;
-      ui.draw(s, gateCounts, GATE_COUNT);
+  if (!armed || inIgnore) {
+    for (uint8_t i = 0; i < GATE_COUNT; i++) {
+      interrupted[i] = false;
+      countedThisInterrupt[i] = false;
     }
-    delay(15);
-    return;
-  }
-
-  if (inIgnore) {
-    interrupted1 = false;
-    countedThisInterrupt1 = false;
     buzzer.off();
 
     s.gate1Signal = false;
     s.stage = 0;
+    s.interruptedMs = 0;
 
     static uint32_t lastDraw = 0;
     if (now - lastDraw >= 120) {
@@ -335,42 +310,58 @@ int16_t strength1 = gate1.getStrength();
     return;
   }
 
-// Brána: detekce funguje i bez kalibrace (fallback = abs(diff)).
-// Kalibrace (setIdle) pouze zlepší stabilitu v náročném prostředí.
-bool broken1 = gate1.isBroken(RUN_THR);
+  // Najdi "nejhorší" přerušenou bránu pro zvuk + UI
+  int bestGate = -1;
+  uint32_t bestMs = 0;
 
-// "Signal OK" = není broken (pro UI)
-s.gate1Signal = !broken1;
+  for (uint8_t i = 0; i < GATE_COUNT; i++) {
+    bool broken = gates[i].isBroken(RUN_THR);
 
-
-  // Přerušení = broken
-  if (broken1) {
-    if (!interrupted1) {
-      interrupted1 = true;
-      interruptSince1 = now;
-      countedThisInterrupt1 = false;
+    if (broken) {
+      if (!interrupted[i]) {
+        interrupted[i] = true;
+        interruptSince[i] = now;
+        countedThisInterrupt[i] = false;
+      }
+    } else {
+      interrupted[i] = false;
+      countedThisInterrupt[i] = false;
     }
-  } else {
-    interrupted1 = false;
-    countedThisInterrupt1 = false;
+
+    if (interrupted[i]) {
+      uint32_t ms = now - interruptSince[i];
+
+      // Po 3s jednorázově přičíst bod
+      if (!countedThisInterrupt[i] && ms >= COUNT_AT_MS) {
+        gateCounts[i]++;
+        countedThisInterrupt[i] = true;
+      }
+
+      if (bestGate < 0 || ms > bestMs) {
+        bestGate = (int)i;
+        bestMs = ms;
+      }
+    }
   }
 
-  uint32_t interruptedMs = interrupted1 ? (now - interruptSince1) : 0;
-  s.interruptedMs = interruptedMs;
+  // UI: signal OK = žádná brána přerušená
+  bool anyInterrupted = (bestGate >= 0);
+  s.gate1Signal = !anyInterrupted;
 
-  SoundMode sm = SoundMode::Off;
+  // Zvuk + stage podle nejhorší brány
   uint8_t stage = 0;
+  SoundMode sm = SoundMode::Off;
 
-  if (interrupted1) {
+  if (anyInterrupted) {
+    uint32_t interruptedMs = bestMs;
+    s.interruptedMs = interruptedMs;
+
     if      (interruptedMs < STAGE1_MS) { stage = 1; sm = SoundMode::GateInterruptedStage1; }
     else if (interruptedMs < STAGE2_MS) { stage = 2; sm = SoundMode::GateInterruptedStage2; }
     else if (interruptedMs < STAGE3_MS) { stage = 3; sm = SoundMode::GateInterruptedStage3; }
     else                                { stage = 4; sm = SoundMode::GateInterruptedSiren; }
-
-    if (!countedThisInterrupt1 && interruptedMs >= COUNT_AT_MS) {
-      gateCounts[0]++; // B1
-      countedThisInterrupt1 = true;
-    }
+  } else {
+    s.interruptedMs = 0;
   }
 
   s.stage = stage;

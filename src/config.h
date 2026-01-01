@@ -2,16 +2,16 @@
 #include <Arduino.h>
 
 // -------- Piny --------
-static const uint8_t USE_PIEZO_PORT_B = 0;  // 1=PB8/PB9, 0=PA8/PA9
+static const uint8_t USE_PIEZO_PORT_B = 1;  // 1=PB8/PB9, 0=PA8/PA9
 static const uint8_t DIFF_INVERT = 1;       // 1: diff=v-base, 0: diff=base-v
-
-// Brána 1 (zatím jediná připojená)
-static const uint8_t IR1_PIN = PA0;
-static const uint8_t SW_ARM  = PA1;
 
 // I2C OLED (BluePill I2C1)
 static const uint8_t I2C_SCL = PB6;
 static const uint8_t I2C_SDA = PB7;
+
+// Tlačítka (INPUT_PULLUP, active LOW)
+static const uint8_t BTN1_PIN = PB10;
+static const uint8_t BTN2_PIN = PB11;
 
 // Piezo piny
 #if USE_PIEZO_PORT_B
@@ -22,14 +22,17 @@ static const uint8_t I2C_SDA = PB7;
   static const uint8_t PZ_B = PA9;
 #endif
 
-// -------- Detekce signálu (Gate1) --------
+// IR brány (PA0..PA7)
+static const uint8_t  GATE_COUNT = 8;
+static const uint8_t  GATE_PINS[GATE_COUNT] = { PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7 };
+
+// -------- Detekce signálu (Gate) --------
 static const uint16_t DELTA_ON  = 45;
 static const uint16_t DELTA_OFF = 25;
 static const uint8_t  BASE_SHIFT = 6;
 static const uint16_t ARM_IGNORE_MS = 600;
 
 // -------- Počítání / uložení --------
-static const uint8_t  GATE_COUNT = 10;
 static const uint16_t SAVE_EVERY_MS = 1000;
 
 // -------- RUN: Reset sekvence (3x OFF->ON do 5s) --------
